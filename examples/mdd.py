@@ -25,9 +25,6 @@ from tools.transforms import ResizeImage
 from tools.lr_scheduler import StepwiseLR
 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
 def main(args: argparse.Namespace):
     if args.seed is not None:
         random.seed(args.seed)
@@ -283,5 +280,14 @@ if __name__ == '__main__':
     parser.add_argument('--lr-gamma', default=0.0002, type=float)
     args = parser.parse_args()
     print(args)
+
+    if torch.cuda.is_available():
+        from nvsmpy import CudaCluster
+        cluster = CudaCluster()
+        with cluster.limit_visible_devices(max_n_processes=1):
+            device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
+
     main(args)
 

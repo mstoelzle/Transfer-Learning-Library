@@ -269,7 +269,7 @@ def train_ssl(inferred_dataloader: DataLoader, model: ImageClassifier,
     progress = ProgressMeter(
         len(inferred_dataloader),
         [batch_time, losses, top1, top5],
-        prefix='Test: ')
+        prefix="Epoch: [{}]".format(epoch))
 
     # switch to train mode
     model.train()

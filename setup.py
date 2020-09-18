@@ -43,7 +43,9 @@ if __name__ == '__main__':
             'torch>=1.4.0',
             'torchvision>=0.5.0',
             'numpy',
-            'qpsolvers>=1.4.0'
+            'qpsolvers>=1.4.0',
+            'nvsmpy',
+            'torchpercentile>=0.2'
         ],
         extras_require={
             'dev': [
@@ -51,4 +53,6 @@ if __name__ == '__main__':
                 'sphinx_rtd_theme',
             ]
         },
+        dependency_links=['https://github.com/lorenz-h/nvsmpy/tarball/master',
+                          'https://github.com/aliutkus/torchpercentile/tarball/master']
     )

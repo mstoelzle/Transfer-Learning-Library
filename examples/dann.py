@@ -18,6 +18,7 @@ import torch.nn.functional as F
 sys.path.append('.')
 from dalib.modules.domain_discriminator import DomainDiscriminator
 from dalib.adaptation.dann import DomainAdversarialLoss, ImageClassifier
+from dalib.adaptation.ssl import SSL
 import dalib.vision.datasets as datasets
 import dalib.vision.models as models
 from tools.utils import AverageMeter, ProgressMeter, accuracy, ForeverDataIterator
@@ -107,6 +108,31 @@ def main(args: argparse.Namespace):
     classifier.load_state_dict(best_model)
     acc1 = validate(test_loader, classifier, args)
     print("test_acc1 = {:3.1f}".format(acc1))
+
+    if args.vwhl:
+        inferred_dataloader = get_ssl_dataloader("train", train_source_loader, train_target_loader, classifier, args)
+        classifier2 = ImageClassifier(backbone, inferred_dataloader.dataset.num_classes).to(device)
+
+        # SSL
+        best_acc2 = 0.
+        for epoch in range(args.epochs):
+            # train for one epoch
+            train_ssl(inferred_dataloader, classifier2, optimizer, lr_scheduler, epoch, args)
+
+            # evaluate on validation set
+            acc2 = validate(val_loader, classifier2, args)
+
+            # remember best acc@2 and save checkpoint
+            if acc2 > best_acc2:
+                best_model2 = copy.deepcopy(classifier.state_dict())
+            best_acc2 = max(acc2, best_acc2)
+
+        print("best_acc2 = {:3.1f}".format(best_acc2))
+
+        # evaluate on test set
+        classifier2.load_state_dict(best_model2)
+        acc2 = validate(test_loader, classifier2, args)
+        print("test_acc2 = {:3.1f}".format(acc2))
 
 
 def train(train_source_iter: ForeverDataIterator, train_target_iter: ForeverDataIterator,
@@ -212,6 +238,72 @@ def validate(val_loader: DataLoader, model: ImageClassifier, args: argparse.Name
     return top1.avg
 
 
+def get_ssl_dataloader(purpose: str, source_loader: DataLoader, target_loader: DataLoader, model: ImageClassifier,
+                       args: argparse.Namespace) -> DataLoader:
+    ssl = SSL(purpose, target_dataloader=target_loader, source_dataloader=source_loader,
+              percentile_rank=args.ssl_percentile_rank, weight_inferred_dataset=args.ssl_weight_inferred_dataset)
+
+    # switch to evaluate mode
+    model.eval()
+
+    with torch.no_grad():
+        for i, (images, target) in enumerate(target_loader):
+            images = images.to(device)
+
+            # compute output
+            output, _ = model(images)
+
+            ssl.add_predictions(output)
+
+    inferred_dataloader = ssl.get_semi_supervised_dataloader()
+
+    return inferred_dataloader
+
+
+def train_ssl(inferred_dataloader: DataLoader, model: ImageClassifier,
+              optimizer: SGD, lr_scheduler: StepwiseLR, epoch: int, args: argparse.Namespace):
+    batch_time = AverageMeter('Time', ':6.3f')
+    losses = AverageMeter('Loss', ':.4e')
+    top1 = AverageMeter('Acc@1', ':6.2f')
+    top5 = AverageMeter('Acc@5', ':6.2f')
+    progress = ProgressMeter(
+        len(inferred_dataloader),
+        [batch_time, losses, top1, top5],
+        prefix='Test: ')
+
+    # switch to train mode
+    model.train()
+
+    end = time.time()
+    for i, (x, labels) in enumerate(inferred_dataloader):
+        lr_scheduler.step()
+
+        x = x.to(device)
+        labels = labels.to(device)
+
+        # compute output
+        output, _ = model(x)
+        loss = F.cross_entropy(output, labels)
+
+        # measure accuracy and record loss
+        acc1, acc5 = accuracy(output, labels, topk=(1, 5))
+        losses.update(loss.item(), x.size(0))
+        top1.update(acc1[0], x.size(0))
+        top5.update(acc5[0], x.size(0))
+
+        # compute gradient and do SGD step
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        # measure elapsed time
+        batch_time.update(time.time() - end)
+        end = time.time()
+
+        if i % args.print_freq == 0:
+            progress.display(i)
+
+
 if __name__ == '__main__':
     architecture_names = sorted(
         name for name in models.__dict__
@@ -247,7 +339,7 @@ if __name__ == '__main__':
                         metavar='LR', help='initial learning rate', dest='lr')
     parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                         help='momentum')
-    parser.add_argument('--wd', '--weight-decay',default=1e-3, type=float,
+    parser.add_argument('--wd', '--weight-decay', default=1e-3, type=float,
                         metavar='W', help='weight decay (default: 1e-3)',
                         dest='weight_decay')
     parser.add_argument('-p', '--print-freq', default=100, type=int,
@@ -258,12 +350,21 @@ if __name__ == '__main__':
                         help='the trade-off hyper-parameter for transfer loss')
     parser.add_argument('-i', '--iters-per-epoch', default=1000, type=int,
                         help='Number of iterations per epoch')
+    parser.add_argument('--vwhl', action='store_true', default=False,
+                        help='Set this flag if you want to use VWHL (SSL step after training)')
+    parser.add_argument('--ssl_percentile_rank', default=0, type=float,
+                        help='Percentile rank required to accept labels to inferred dataset '
+                             'during semi-supervised learning.')
+    parser.add_argument('--ssl_weight_inferred_dataset', default=1, type=float,
+                        help='Weight of the inferred dataset in target domain while '
+                             'merging with the source domain dataset')
 
     args = parser.parse_args()
     print(args)
 
     if torch.cuda.is_available():
         from nvsmpy import CudaCluster
+
         cluster = CudaCluster()
         with cluster.limit_visible_devices(max_n_processes=1):
             device = torch.device("cuda")
@@ -271,4 +372,3 @@ if __name__ == '__main__':
         device = torch.device("cpu")
 
     main(args)
-

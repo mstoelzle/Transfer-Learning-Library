@@ -4,4 +4,3 @@ torch>=1.4.0
 torchvision>=0.5.0
 
 git+git://github.com/lorenz-h/nvsmpy.git@master
-git+https://github.com/aliutkus/torchpercentile

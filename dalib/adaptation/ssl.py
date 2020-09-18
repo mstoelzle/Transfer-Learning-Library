@@ -49,12 +49,7 @@ class SSL:
         self.start_idx += pred.size(0)
 
     def get_semi_supervised_dataloader(self) -> DataLoader:
-        if torch.cuda.is_available():
-            from torchpercentile import Percentile
-            percentiles = Percentile()(self.max_pred_probabilities, [self.percentile_rank])
-            percentile = percentiles[0].item()
-        else:
-            percentile = np.percentile(self.max_pred_probabilities, self.percentile_rank)
+        percentile = np.percentile(self.max_pred_probabilities.cpu(), self.percentile_rank)
 
         threshold: float = max(self.certainty_threshold, percentile)
         self.max_predictions[self.max_pred_probabilities < threshold] = -1

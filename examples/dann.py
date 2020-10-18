@@ -111,13 +111,20 @@ def main(args: argparse.Namespace):
 
     if args.vwhl:
         inferred_dataloader = get_ssl_dataloader("train", train_source_loader, train_target_loader, classifier, args)
-        classifier2 = ImageClassifier(backbone, inferred_dataloader.dataset.num_classes).to(device)
+
+        lr_scheduler2 = StepwiseLR(optimizer, init_lr=args.vwhl_lr, gamma=0.001, decay_rate=0.75)
+
+        if args.vwhl_finetuning:
+            # we are trying out fine-tuning now
+            classifier2 = ImageClassifier(backbone, inferred_dataloader.dataset.num_classes).to(device)
+        else:
+            classifier2 = classifier
 
         # SSL
         best_acc2 = 0.
         for epoch in range(args.epochs):
             # train for one epoch
-            train_ssl(inferred_dataloader, classifier2, optimizer, lr_scheduler, epoch, args)
+            train_ssl(inferred_dataloader, classifier2, optimizer, lr_scheduler2, epoch, args)
 
             # evaluate on validation set
             acc2 = validate(val_loader, classifier2, args)
@@ -352,6 +359,10 @@ if __name__ == '__main__':
                         help='Number of iterations per epoch')
     parser.add_argument('--vwhl', action='store_true', default=False,
                         help='Set this flag if you want to use VWHL (SSL step after training)')
+    parser.add_argument('--vwhl-finetuning', action='store_true', default=False,
+                        help='Set this flag if you want to use the DC-trained model during SSL in VWHL')
+    parser.add_argument('--vwhl-lr', default=0.01, type=float,
+                        metavar='VWHL LR', help='initial learning rate for VWHL', dest='vwhl-lr')
     parser.add_argument('--ssl_percentile_rank', default=0, type=float,
                         help='Percentile rank required to accept labels to inferred dataset '
                              'during semi-supervised learning.')

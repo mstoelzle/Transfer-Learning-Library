@@ -362,7 +362,7 @@ if __name__ == '__main__':
     parser.add_argument('--vwhl-finetuning', action='store_true', default=False,
                         help='Set this flag if you want to use the DC-trained model during SSL in VWHL')
     parser.add_argument('--vwhl-lr', default=0.01, type=float,
-                        metavar='VWHL LR', help='initial learning rate for VWHL', dest='vwhl-lr')
+                        metavar='VWHL LR', help='initial learning rate for VWHL')
     parser.add_argument('--ssl_percentile_rank', default=0, type=float,
                         help='Percentile rank required to accept labels to inferred dataset '
                              'during semi-supervised learning.')

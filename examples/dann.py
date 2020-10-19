@@ -110,15 +110,22 @@ def main(args: argparse.Namespace):
     print("test_acc1 = {:3.1f}".format(acc1))
 
     if args.vwhl:
+        print("Start VWHL")
+
         inferred_dataloader = get_ssl_dataloader("train", train_source_loader, train_target_loader, classifier, args)
 
         lr_scheduler2 = StepwiseLR(optimizer, init_lr=args.vwhl_lr, gamma=0.001, decay_rate=0.75)
 
         if args.vwhl_finetuning:
+            print("Using VWHL finetuning")
             # we are trying out fine-tuning now
             classifier2 = ImageClassifier(backbone, inferred_dataloader.dataset.num_classes).to(device)
         else:
             classifier2 = classifier
+
+        # evaluate on test set
+        acc2 = validate(test_loader, classifier2, args)
+        print("test_acc2 = {:3.1f}".format(acc2))
 
         # SSL
         best_acc2 = 0.

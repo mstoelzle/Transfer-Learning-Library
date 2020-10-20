@@ -24,6 +24,7 @@ import dalib.vision.models as models
 from tools.utils import AverageMeter, ProgressMeter, accuracy, ForeverDataIterator
 from tools.transforms import ResizeImage
 from tools.lr_scheduler import StepwiseLR
+from tools.dataloaders import get_dataloader
 
 
 def main(args: argparse.Namespace):
@@ -56,14 +57,21 @@ def main(args: argparse.Namespace):
     ])
 
     dataset = datasets.__dict__[args.data]
+
     train_source_dataset = dataset(root=args.root, task=args.source, download=True, transform=train_transform)
-    train_source_loader = DataLoader(train_source_dataset, batch_size=args.batch_size,
-                                     shuffle=True, num_workers=args.workers, drop_last=True)
     train_target_dataset = dataset(root=args.root, task=args.target, download=True, transform=train_transform)
-    train_target_loader = DataLoader(train_target_dataset, batch_size=args.batch_size,
-                                     shuffle=True, num_workers=args.workers, drop_last=True)
-    val_dataset = dataset(root=args.root, task=args.target, download=True, transform=val_transform)
-    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers)
+    val_source_dataset = dataset(root=args.root, task=args.source, download=True, transform=val_transform)
+    val_target_dataset = dataset(root=args.root, task=args.target, download=True, transform=val_transform)
+
+    train_source_loader = get_dataloader(train_source_dataset, start_fraction=0, stop_fraction=0.8,
+                                         shuffle=True, batch_size=args.batch_size, num_workers=args.workers,
+                                         drop_last=True)
+    train_target_loader = get_dataloader(train_target_dataset, start_fraction=0, stop_fraction=0.8,
+                                         shuffle=True, batch_size=args.batch_size, num_workers=args.workers,
+                                         drop_last=True)
+    val_loader = get_dataloader(val_target_dataset, start_fraction=0.8, stop_fraction=1,
+                                shuffle=True, batch_size=args.batch_size, num_workers=args.workers, drop_last=True)
+
     if args.data == 'DomainNet':
         test_dataset = dataset(root=args.root, task=args.target, evaluate=True, download=True, transform=val_transform)
         test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers)
